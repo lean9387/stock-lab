@@ -1,0 +1,20 @@
+{
+  "name": "stock-lab-portfolio",
+  "version": "1.0.0",
+  "description": "Portfolio and dividend dashboard prototype inspired by market lab dashboards.",
+  "main": "dev-server.js",
+  "scripts": {
+    "start": "node dev-server.js",
+    "dev": "node dev-server.js 5173"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "portfolio",
+    "stocks",
+    "dividend",
+    "dashboard"
+  ],
+  "license": "UNLICENSED"
+}
