@@ -1118,7 +1118,7 @@ select:focus {
 
 .holdings-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -1194,14 +1194,27 @@ select:focus {
   color: var(--soft);
 }
 
-.holding-item button {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 93, 115, 0.28);
-  border-radius: 7px;
+.holding-remove {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.025);
+  color: #9aa8bd;
+  padding: 0;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.holding-remove:hover {
+  border-color: rgba(255, 93, 115, 0.22);
   background: rgba(255, 93, 115, 0.08);
-  color: var(--red);
-  font-weight: 900;
+  color: #ff8fa0;
+  transform: scale(1.04);
 }
 
 .dashboard {
@@ -1603,7 +1616,16 @@ canvas {
 
   .section-tabs {
     width: 100%;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .section-tabs button {
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 12px;
+    text-align: center;
   }
 
   .summary-grid,

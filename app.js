@@ -443,7 +443,7 @@ function renderHoldings(rows) {
         <span>${row.quantity.toLocaleString("ko-KR")}주 · ${money(row.stock, row.stock.price)} · 배당률 ${row.stock.dividendYield.toFixed(2)}%</span>
         <small class="holding-sub">${won(row.value)} · 연 배당 ${won(row.annualDividend)} · ${row.stock.dividendFrequency}</small>
       </div>
-      <button type="button" aria-label="${row.stock.code} 삭제" data-remove="${row.code}">×</button>
+      <button class="holding-remove" type="button" aria-label="${row.stock.code} 삭제" data-remove="${row.code}">×</button>
     </div>
   `).join("");
 }
@@ -963,7 +963,7 @@ document.querySelectorAll("[data-days]").forEach((button) => {
   });
 });
 
-elements.resetButton.addEventListener("click", () => {
+elements.resetButton?.addEventListener("click", () => {
   holdings = [];
   render();
 });
