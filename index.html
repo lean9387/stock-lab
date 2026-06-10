@@ -40,8 +40,22 @@
 
       <section class="view active" data-view="dashboard">
         <section class="index-grid" aria-label="주요 지수">
-          <button class="index-card" type="button">
-            <span class="flag" aria-hidden="true">KR</span>
+          <button class="index-card" type="button" data-index-group="korea">
+            <span class="flag" aria-hidden="true">
+              <svg class="flag-svg flag-kr-svg" viewBox="0 0 36 24" focusable="false">
+                <rect width="36" height="24" rx="3" fill="#fff" />
+                <g transform="translate(18 12) rotate(30)">
+                  <path d="M0 -6a6 6 0 0 1 0 12 3 3 0 0 1 0 -6 3 3 0 0 0 0 -6Z" fill="#cd2e3a" />
+                  <path d="M0 6a6 6 0 0 1 0 -12 3 3 0 0 1 0 6 3 3 0 0 0 0 6Z" fill="#0047a0" />
+                </g>
+                <g stroke="#111827" stroke-width="1" stroke-linecap="round">
+                  <path d="M6 5h7M6 7h7M6 9h7" transform="rotate(-30 9.5 7)" />
+                  <path d="M23 5h7M23 7h7M23 9h7" transform="rotate(30 26.5 7)" />
+                  <path d="M6 15h7M6 17h7M6 19h7" transform="rotate(30 9.5 17)" />
+                  <path d="M23 15h7M23 17h7M23 19h7" transform="rotate(-30 26.5 17)" />
+                </g>
+              </svg>
+            </span>
             <span class="index-body">
               <small>Korea Composite Stock Price Index</small>
               <strong>KOSPI</strong>
@@ -52,8 +66,12 @@
               <em id="kospiChange" class="down">-5.54%</em>
             </span>
           </button>
-          <button class="index-card" type="button">
-            <span class="flag" aria-hidden="true">US</span>
+          <button class="index-card" type="button" data-index-group="us">
+            <span class="flag" aria-hidden="true">
+              <span class="flag-icon flag-us">
+                <span class="canton"></span>
+              </span>
+            </span>
             <span class="index-body">
               <small>NASDAQ Composite</small>
               <strong>NASDAQ</strong>
@@ -121,24 +139,21 @@
             <button type="button" data-stock-filter="overseas">해외</button>
           </div>
           <div class="search-row">
-            <input id="stockSearchInput" type="search" placeholder="예: JOBY, Solid Power, Tesla, 삼성전자" />
-            <button id="clearSearchButton" type="button">전체 보기</button>
+            <span class="search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z" />
+              </svg>
+            </span>
+            <input id="stockSearchInput" type="search" placeholder="종목명 또는 종목코드로 검색" />
+          </div>
+          <div class="stock-sort-tabs" aria-label="종목 보기 순서">
+            <button class="active" type="button" data-stock-sort="watch">관심</button>
+            <button type="button" data-stock-sort="default">기본순</button>
+            <button type="button" data-stock-sort="traded">거래대금</button>
+            <button type="button" data-stock-sort="marketCap">시가총액</button>
+            <button type="button" data-stock-sort="change">등락률</button>
           </div>
           <div id="searchResults" class="search-results"></div>
-        </article>
-
-        <article class="table-panel">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker">Watchlist</p>
-              <h2>관심 종목</h2>
-            </div>
-            <label class="toggle">
-              <input id="onlyPositiveToggle" type="checkbox" />
-              배당 종목만
-            </label>
-          </div>
-          <div class="stock-table" id="stockTable"></div>
         </article>
       </section>
 
@@ -176,43 +191,13 @@
             <em id="riskLabel">세전 배당률</em>
           </article>
           <article class="metric">
-            <span>배당 지급 종목</span>
-            <strong id="holdingCount">0</strong>
-            <em>개</em>
+            <span>이번 달 배당금</span>
+            <strong id="monthlyDividend">0원</strong>
+            <em>월 환산 기준</em>
           </article>
         </section>
 
         <section class="workspace">
-          <aside class="side-panel" aria-label="포트폴리오 입력">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">My Holdings</p>
-                <h2>보유 종목</h2>
-              </div>
-              <button id="resetButton" type="button">초기화</button>
-            </div>
-
-            <form id="holdingForm" class="holding-form">
-              <label>
-                종목
-                <select id="stockSelect"></select>
-              </label>
-              <div class="form-grid">
-                <label>
-                  수량
-                  <input id="quantityInput" type="number" min="1" value="10" />
-                </label>
-                <label>
-                  평균 단가
-                  <input id="avgPriceInput" type="number" min="0.01" step="0.01" value="9.55" />
-                </label>
-              </div>
-              <button type="submit">포트폴리오에 추가</button>
-            </form>
-
-            <div id="holdingsList" class="holdings-list"></div>
-          </aside>
-
           <section class="dashboard" aria-label="내 주식 분석">
             <div class="chart-row">
               <article class="chart-panel">
@@ -225,23 +210,19 @@
                 </div>
                 <canvas id="allocationChart"></canvas>
               </article>
-
-              <article class="chart-panel">
-                <div class="panel-head">
-                  <div>
-                    <p class="panel-kicker">Dividend Income</p>
-                    <h2>배당 현금흐름</h2>
-                  </div>
-                  <div class="scenario-tabs" role="tablist" aria-label="배당 기간">
-                    <button class="active" type="button" data-days="1">1년</button>
-                    <button type="button" data-days="3">3년</button>
-                    <button type="button" data-days="5">5년</button>
-                  </div>
-                </div>
-                <canvas id="forecastChart"></canvas>
-              </article>
             </div>
           </section>
+
+          <aside class="side-panel holdings-panel" aria-label="보유 종목">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">My Holdings</p>
+                <h2>보유 종목</h2>
+              </div>
+              <button id="resetButton" type="button">초기화</button>
+            </div>
+            <div id="holdingsList" class="holdings-list"></div>
+          </aside>
         </section>
       </section>
 
@@ -318,7 +299,54 @@
           </div>
           <div class="detail-actions">
             <button type="button" id="detailWatchButton">관심추가</button>
+            <button type="button" id="detailHoldButton">보유추가</button>
           </div>
+        </article>
+      </div>
+
+      <div class="index-modal" id="indexModal" aria-hidden="true">
+        <button class="modal-backdrop" type="button" data-close-index-modal aria-label="시장 지수 닫기"></button>
+        <article class="index-detail-panel" role="dialog" aria-modal="true" aria-labelledby="indexModalTitle">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker" id="indexModalKicker">Market Index</p>
+              <h2 id="indexModalTitle">시장 지수</h2>
+            </div>
+            <button class="modal-close" type="button" data-close-index-modal>×</button>
+          </div>
+          <div id="indexModalList" class="index-modal-list"></div>
+        </article>
+      </div>
+
+      <div class="holding-modal" id="holdingModal" aria-hidden="true">
+        <button class="modal-backdrop" type="button" data-close-holding-modal aria-label="보유 추가 닫기"></button>
+        <article class="holding-detail-panel" role="dialog" aria-modal="true" aria-labelledby="holdingModalTitle">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Add Holding</p>
+              <h2 id="holdingModalTitle">보유 종목 추가</h2>
+            </div>
+            <button class="modal-close" type="button" data-close-holding-modal>×</button>
+          </div>
+          <form id="holdingForm" class="holding-form">
+            <input id="stockSelect" type="hidden" />
+            <div class="holding-modal-stock">
+              <span id="holdingModalCode">-</span>
+              <strong id="holdingModalName">-</strong>
+              <small id="holdingModalPrice">-</small>
+            </div>
+            <div class="form-grid">
+              <label>
+                수량
+                <input id="quantityInput" type="number" min="1" value="1" />
+              </label>
+              <label>
+                평균 단가
+                <input id="avgPriceInput" type="number" min="0.01" step="any" value="0" />
+              </label>
+            </div>
+            <button type="submit">포트폴리오에 추가</button>
+          </form>
         </article>
       </div>
     </main>

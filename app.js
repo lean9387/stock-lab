@@ -22,8 +22,11 @@ let holdings = [
 let watchlist = ["JOBY", "SLDP", "SCHD", "O", "VZ", "KO", "005930"];
 let forecastDays = 1;
 let stockFilter = "all";
+let stockSort = "watch";
+let stockSortDirection = "asc";
 let detailPeriod = "1m";
 let detailChartHoverIndex = null;
+const marketQuotes = new Map();
 const colors = ["#4f8cff", "#27d596", "#ff5d73", "#f2bf4b", "#8b5cf6", "#39d0ff", "#f472b6", "#94a3b8"];
 
 const krwFormatter = new Intl.NumberFormat("ko-KR");
@@ -54,6 +57,20 @@ const yahooSymbolFor = (stock) => {
   return stock.code;
 };
 const signedPercentText = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+const stockLogos = {
+  JOBY: { text: "J", url: "https://logo.clearbit.com/jobyaviation.com" },
+  SLDP: { text: "SP", url: "https://logo.clearbit.com/solidpowerbattery.com" },
+  SCHD: { text: "S", url: "https://logo.clearbit.com/schwabassetmanagement.com" },
+  O: { text: "O", url: "https://logo.clearbit.com/realtyincome.com" },
+  VZ: { text: "VZ", url: "https://logo.clearbit.com/verizon.com" },
+  KO: { text: "KO", url: "https://logo.clearbit.com/coca-cola.com" },
+  TSLA: { text: "T", url: "https://logo.clearbit.com/tesla.com" },
+  NVDA: { text: "NV", url: "https://logo.clearbit.com/nvidia.com" },
+  "005930": { text: "삼", url: "https://logo.clearbit.com/samsung.com" },
+  "000660": { text: "SK", url: "https://logo.clearbit.com/skhynix.com" },
+  "005380": { text: "H", url: "https://logo.clearbit.com/hyundai.com" }
+};
+const stockLogoFor = (stock) => stockLogos[stock.code] || { text: stock.code.slice(0, 2), url: "" };
 const heartIcon = (active) => `
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M12 20.2c-.3 0-.6-.1-.8-.3C5.5 15.1 2 11.9 2 7.9 2 4.9 4.3 2.7 7.2 2.7c1.7 0 3.4.8 4.4 2.1 1-1.3 2.7-2.1 4.4-2.1 2.9 0 5.2 2.2 5.2 5.2 0 4-3.5 7.2-9.2 12-.2.2-.5.3-.8.3Z"/>
@@ -85,20 +102,16 @@ const elements = {
   forecastLabel: document.querySelector("#forecastLabel"),
   riskScore: document.querySelector("#riskScore"),
   riskLabel: document.querySelector("#riskLabel"),
-  holdingCount: document.querySelector("#holdingCount"),
+  monthlyDividend: document.querySelector("#monthlyDividend"),
   stockSelect: document.querySelector("#stockSelect"),
   quantityInput: document.querySelector("#quantityInput"),
   avgPriceInput: document.querySelector("#avgPriceInput"),
   holdingForm: document.querySelector("#holdingForm"),
   holdingsList: document.querySelector("#holdingsList"),
   allocationChart: document.querySelector("#allocationChart"),
-  forecastChart: document.querySelector("#forecastChart"),
-  stockTable: document.querySelector("#stockTable"),
   largestHolding: document.querySelector("#largestHolding"),
   resetButton: document.querySelector("#resetButton"),
-  onlyPositiveToggle: document.querySelector("#onlyPositiveToggle"),
   stockSearchInput: document.querySelector("#stockSearchInput"),
-  clearSearchButton: document.querySelector("#clearSearchButton"),
   searchResults: document.querySelector("#searchResults")
 };
 
@@ -109,6 +122,12 @@ const marketElements = {
   nasdaqValue: document.querySelector("#nasdaqValue"),
   nasdaqChange: document.querySelector("#nasdaqChange"),
   status: document.querySelector("#marketDataStatus")
+};
+const indexModalElements = {
+  modal: document.querySelector("#indexModal"),
+  kicker: document.querySelector("#indexModalKicker"),
+  title: document.querySelector("#indexModalTitle"),
+  list: document.querySelector("#indexModalList")
 };
 const detailElements = {
   modal: document.querySelector("#stockModal"),
@@ -121,7 +140,13 @@ const detailElements = {
   dividend: document.querySelector("#detailDividend"),
   yield: document.querySelector("#detailYield"),
   watchButton: document.querySelector("#detailWatchButton"),
-  holdButton: null
+  holdButton: document.querySelector("#detailHoldButton")
+};
+const holdingModalElements = {
+  modal: document.querySelector("#holdingModal"),
+  code: document.querySelector("#holdingModalCode"),
+  name: document.querySelector("#holdingModalName"),
+  price: document.querySelector("#holdingModalPrice")
 };
 let activeDetailCode = null;
 
@@ -390,8 +415,8 @@ function renderSummary(rows) {
   const cost = rows.reduce((sum, row) => sum + row.cost, 0);
   const totalChange = cost ? ((total - cost) / cost) * 100 : 0;
   const annualIncome = rows.reduce((sum, row) => sum + row.annualDividend, 0);
+  const monthlyIncome = annualIncome / 12;
   const dividendYield = total ? (annualIncome / total) * 100 : 0;
-  const dividendPayers = rows.filter((row) => row.annualDividend > 0).length;
   const largest = rows.length ? [...rows].sort((a, b) => b.value - a.value)[0] : null;
 
   elements.totalValue.textContent = won(total);
@@ -402,14 +427,18 @@ function renderSummary(rows) {
   elements.forecastLabel.className = annualIncome > 0 ? "up" : "neutral";
   elements.riskScore.textContent = `${dividendYield.toFixed(2)}%`;
   elements.riskLabel.textContent = "세전 배당률";
-  elements.holdingCount.textContent = String(dividendPayers);
+  elements.monthlyDividend.textContent = won(monthlyIncome);
   elements.largestHolding.textContent = largest ? `${largest.stock.code} ${((largest.value / total) * 100).toFixed(1)}%` : "-";
 }
 
 function renderHoldings(rows) {
   elements.holdingsList.innerHTML = rows.map((row) => `
     <div class="holding-item">
-      <div>
+      <div class="holding-logo" aria-hidden="true">
+        ${stockLogoFor(row.stock).url ? `<img src="${stockLogoFor(row.stock).url}" alt="" loading="lazy" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()" />` : ""}
+        <span>${stockLogoFor(row.stock).text}</span>
+      </div>
+      <div class="holding-copy">
         <strong>${row.stock.koName} <small>${row.stock.code}</small></strong>
         <span>${row.quantity.toLocaleString("ko-KR")}주 · ${money(row.stock, row.stock.price)} · 배당률 ${row.stock.dividendYield.toFixed(2)}%</span>
         <small class="holding-sub">${won(row.value)} · 연 배당 ${won(row.annualDividend)} · ${row.stock.dividendFrequency}</small>
@@ -450,16 +479,58 @@ function renderTable() {
   `;
 }
 
+function sortedSearchStocks(rows) {
+  const list = [...rows];
+  const direction = stockSortDirection === "asc" ? 1 : -1;
+  if (stockSort === "watch") {
+    return list
+      .filter((stock) => watchlist.includes(stock.code))
+      .sort((a, b) => watchlist.indexOf(a.code) - watchlist.indexOf(b.code));
+  }
+  if (stockSort === "traded") {
+    return list.sort((a, b) => ((a.tradedValue || 0) - (b.tradedValue || 0)) * direction);
+  }
+  if (stockSort === "marketCap") {
+    return list.sort((a, b) => ((a.marketCap || 0) - (b.marketCap || 0)) * direction);
+  }
+  if (stockSort === "change") {
+    return list.sort((a, b) => ((a.change || 0) - (b.change || 0)) * direction);
+  }
+  return list;
+}
+
+function updateSortButtons() {
+  const directionalSorts = new Set(["traded", "marketCap", "change"]);
+  document.querySelectorAll("[data-stock-sort]").forEach((button) => {
+    const isActive = button.dataset.stockSort === stockSort;
+    button.classList.toggle("active", isActive);
+    button.dataset.direction = isActive && directionalSorts.has(stockSort) ? stockSortDirection : "";
+    let arrow = button.querySelector(".sort-arrow");
+    if (!arrow && directionalSorts.has(button.dataset.stockSort)) {
+      arrow = document.createElement("span");
+      arrow.className = "sort-arrow";
+      button.appendChild(arrow);
+    }
+    if (arrow) {
+      arrow.textContent = isActive && directionalSorts.has(stockSort) ? (stockSortDirection === "asc" ? "↑" : "↓") : "";
+    }
+  });
+}
+
 function renderSearchResults() {
   const query = elements.stockSearchInput.value.trim().toLowerCase();
-  const rows = filteredStocks(stocks).filter((stock) => {
+  const rows = sortedSearchStocks(filteredStocks(stocks).filter((stock) => {
     const haystack = `${stock.code} ${stock.name} ${stock.koName} ${stock.sector} ${stock.market}`.toLowerCase();
     return !query || haystack.includes(query);
-  });
+  }));
 
-  elements.searchResults.innerHTML = rows.map((stock) => `
+  elements.searchResults.innerHTML = rows.length ? rows.map((stock) => `
     <div class="search-result" data-open-detail="${stock.code}">
       <button class="heart-button ${watchlist.includes(stock.code) ? "active" : ""}" type="button" data-watch="${stock.code}" aria-label="${stock.koName} 관심">${heartIcon(watchlist.includes(stock.code))}</button>
+      <div class="search-logo" aria-hidden="true">
+        ${stockLogoFor(stock).url ? `<img src="${stockLogoFor(stock).url}" alt="" loading="lazy" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()" />` : ""}
+        <span>${stockLogoFor(stock).text}</span>
+      </div>
       <div class="stock-name">
         <strong>${stock.koName}</strong>
         <span>${stock.code} · ${stock.name} · ${stock.market}</span>
@@ -468,10 +539,13 @@ function renderSearchResults() {
         <strong>${money(stock, stock.price)}</strong>
         <span class="${stock.dividendYield > 0 ? "up" : "neutral"}">배당 ${stock.dividendYield.toFixed(2)}%</span>
       </div>
-      <div class="search-actions">
-      </div>
     </div>
-  `).join("");
+  `).join("") : `
+    <div class="empty-search">
+      <strong>표시할 종목이 없습니다</strong>
+      <span>관심 종목을 추가하거나 다른 보기 기준을 선택해보세요.</span>
+    </div>
+  `;
 }
 
 function renderMarketStockCards() {
@@ -646,6 +720,89 @@ function closeStockDetail() {
   detailElements.modal.setAttribute("aria-hidden", "true");
 }
 
+function quoteFor(symbol, fallbackPrice, fallbackChange = 0) {
+  const quote = marketQuotes.get(symbol);
+  return {
+    price: typeof quote?.price === "number" ? quote.price : fallbackPrice,
+    change: typeof quote?.change === "number" ? quote.change : fallbackChange
+  };
+}
+
+function indexModalRows(group) {
+  if (group === "korea") {
+    return {
+      kicker: "Korea Market",
+      title: "국내 시장",
+      rows: [
+        { label: "KOSPI", source: "KRX", ...quoteFor("^KS11", 3160.59, -0.54) },
+        { label: "KOSDAQ", source: "KRX", ...quoteFor("^KQ11", 842.18, -0.28) },
+        { label: "USD/KRW", source: "FX", price: usdKrw, change: 0, prefix: "₩", noPercent: true }
+      ]
+    };
+  }
+  return {
+    kicker: "US Market",
+    title: "미국 시장",
+    rows: [
+      { label: "NASDAQ", source: "Yahoo Finance", ...quoteFor("^IXIC", 19447.41, -0.83) },
+      { label: "S&P 500", source: "Yahoo Finance", ...quoteFor("^GSPC", 6043.82, -0.31) },
+      { label: "다우존스", source: "Yahoo Finance", ...quoteFor("^DJI", 42865.77, -0.22) }
+    ]
+  };
+}
+
+function formatIndexPrice(item) {
+  if (item.prefix) return `${item.prefix}${krwFormatter.format(Math.round(item.price))}`;
+  return krwFormatter.format(Number(item.price.toFixed(2)));
+}
+
+function openIndexModal(group) {
+  const data = indexModalRows(group);
+  indexModalElements.kicker.textContent = data.kicker;
+  indexModalElements.title.textContent = data.title;
+  indexModalElements.list.innerHTML = data.rows.map((item) => {
+    const change = item.change || 0;
+    return `
+      <div class="index-modal-item">
+        <div>
+          <strong>${item.label}</strong>
+          <span>${item.source}</span>
+        </div>
+        <div class="index-modal-price">
+          <strong>${formatIndexPrice(item)}</strong>
+          <em class="${change >= 0 ? "up" : "down"}">${item.noPercent ? "실시간 환율" : signedPercentText(change)}</em>
+        </div>
+      </div>
+    `;
+  }).join("");
+  indexModalElements.modal.classList.add("open");
+  indexModalElements.modal.setAttribute("aria-hidden", "false");
+}
+
+function closeIndexModal() {
+  indexModalElements.modal.classList.remove("open");
+  indexModalElements.modal.setAttribute("aria-hidden", "true");
+}
+
+function openHoldingModal(code) {
+  const stock = stockByCode(code);
+  if (!stock) return;
+  elements.stockSelect.value = code;
+  elements.quantityInput.value = "1";
+  elements.avgPriceInput.value = String(stock.price);
+  holdingModalElements.code.textContent = `${stock.code} · ${stock.market}`;
+  holdingModalElements.name.textContent = stock.koName;
+  holdingModalElements.price.textContent = `현재가 ${money(stock, stock.price)}`;
+  holdingModalElements.modal.classList.add("open");
+  holdingModalElements.modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => elements.quantityInput.focus(), 0);
+}
+
+function closeHoldingModal() {
+  holdingModalElements.modal.classList.remove("open");
+  holdingModalElements.modal.setAttribute("aria-hidden", "true");
+}
+
 function setActiveView(viewName) {
   document.querySelectorAll("[data-view]").forEach((view) => {
     view.classList.toggle("active", view.dataset.view === viewName);
@@ -660,17 +817,13 @@ function render() {
   const rows = holdingRows();
   renderSummary(rows);
   renderHoldings(rows);
-  renderTable();
   renderSearchResults();
   renderMarketStockCards();
   drawAllocation(rows);
-  drawForecast(rows);
 }
 
 function populateStocks() {
-  elements.stockSelect.innerHTML = stocks.map((stock) => (
-    `<option value="${stock.code}">${stock.koName} (${stock.code})</option>`
-  )).join("");
+  elements.stockSelect.value = holdings[0]?.code || stocks[0]?.code || "";
 }
 
 function updateSelectedPrice() {
@@ -706,13 +859,15 @@ function updateIndexDisplay(prefix, quote) {
 
 async function refreshMarketData() {
   const stockSymbols = [...new Set(stocks.map((stock) => yahooSymbolFor(stock)))];
-  const symbols = ["^KS11", "^IXIC", "KRW=X", ...stockSymbols];
+  const symbols = ["^KS11", "^KQ11", "^IXIC", "^GSPC", "^DJI", "KRW=X", ...stockSymbols];
 
   try {
     const response = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     const quotes = new Map(payload.quotes.map((quote) => [quote.symbol, quote]));
+    marketQuotes.clear();
+    quotes.forEach((quote, symbol) => marketQuotes.set(symbol, quote));
 
     const fxQuote = quotes.get("KRW=X");
     if (fxQuote && typeof fxQuote.price === "number") {
@@ -763,6 +918,8 @@ elements.holdingForm.addEventListener("submit", (event) => {
     holdings.push({ code, quantity, avgPrice });
   }
   if (!watchlist.includes(code)) watchlist.unshift(code);
+  closeHoldingModal();
+  setActiveView("my-stocks");
   render();
 });
 
@@ -793,16 +950,8 @@ elements.searchResults.addEventListener("click", (event) => {
   }
 
   if (holdCode) {
-    elements.stockSelect.value = holdCode;
-    elements.quantityInput.value = "1";
-    updateSelectedPrice();
-    elements.quantityInput.focus();
+    openHoldingModal(holdCode);
   }
-});
-
-elements.stockTable.addEventListener("click", (event) => {
-  const row = event.target.closest("[data-open-detail]");
-  if (row) openStockDetail(row.dataset.openDetail);
 });
 
 document.querySelectorAll("[data-days]").forEach((button) => {
@@ -819,13 +968,7 @@ elements.resetButton.addEventListener("click", () => {
   render();
 });
 
-elements.onlyPositiveToggle.addEventListener("change", renderTable);
 elements.stockSearchInput.addEventListener("input", renderSearchResults);
-elements.clearSearchButton.addEventListener("click", () => {
-  elements.stockSearchInput.value = "";
-  renderSearchResults();
-});
-elements.stockSelect.addEventListener("change", updateSelectedPrice);
 document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () => setActiveView(button.dataset.viewTarget));
 });
@@ -838,8 +981,24 @@ document.querySelectorAll("[data-stock-filter]").forEach((button) => {
     render();
   });
 });
+document.querySelectorAll("[data-stock-sort]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextSort = button.dataset.stockSort;
+    if (stockSort === nextSort && ["traded", "marketCap", "change"].includes(nextSort)) {
+      stockSortDirection = stockSortDirection === "asc" ? "desc" : "asc";
+    } else {
+      stockSort = nextSort;
+      stockSortDirection = "asc";
+    }
+    updateSortButtons();
+    renderSearchResults();
+  });
+});
 document.querySelectorAll("[data-stock-card]").forEach((button) => {
   button.addEventListener("click", () => openStockDetail(button.dataset.stockCard));
+});
+document.querySelectorAll("[data-index-group]").forEach((button) => {
+  button.addEventListener("click", () => openIndexModal(button.dataset.indexGroup));
 });
 document.querySelectorAll("[data-detail-period]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -853,6 +1012,12 @@ document.querySelector("#detailChart").addEventListener("mouseleave", hideDetail
 document.querySelectorAll("[data-close-stock-modal]").forEach((button) => {
   button.addEventListener("click", closeStockDetail);
 });
+document.querySelectorAll("[data-close-index-modal]").forEach((button) => {
+  button.addEventListener("click", closeIndexModal);
+});
+document.querySelectorAll("[data-close-holding-modal]").forEach((button) => {
+  button.addEventListener("click", closeHoldingModal);
+});
 detailElements.watchButton.addEventListener("click", () => {
   if (activeDetailCode && !watchlist.includes(activeDetailCode)) {
     watchlist.unshift(activeDetailCode);
@@ -860,8 +1025,14 @@ detailElements.watchButton.addEventListener("click", () => {
   render();
   openStockDetail(activeDetailCode);
 });
+detailElements.holdButton.addEventListener("click", () => {
+  if (!activeDetailCode) return;
+  closeStockDetail();
+  openHoldingModal(activeDetailCode);
+});
 populateStocks();
 updateSelectedPrice();
+updateSortButtons();
 updateMarketTime();
 setInterval(updateMarketTime, 1000);
 refreshMarketData();
