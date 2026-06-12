@@ -33,6 +33,12 @@ let allocationChartHoverIndex = null;
 let allocationChartState = { rows: [], segments: [], total: 0, layout: null };
 let activeHoldingEditorCode = null;
 let modalScrollY = 0;
+let authUser = null;
+let pendingSignup = null;
+const authStorageKey = "stockLabAuthUser";
+const authUsersStorageKey = "stockLabAuthUsers";
+const kakaoJavascriptKey = "";
+const kakaoRedirectUri = `${window.location.origin}${window.location.pathname}`;
 const marketQuotes = new Map();
 const investorFlowCache = new Map();
 const colors = ["#4f8cff", "#27d596", "#ff5d73", "#f2bf4b", "#8b5cf6", "#39d0ff", "#f472b6", "#94a3b8"];
@@ -127,7 +133,7 @@ const heartIcon = (active) => `
 `;
 
 function syncModalScrollLock() {
-  const hasOpenModal = !!document.querySelector(".stock-modal.open, .index-modal.open, .holding-modal.open");
+  const hasOpenModal = !!document.querySelector(".stock-modal.open, .index-modal.open, .holding-modal.open, .auth-modal.open");
   if (hasOpenModal && !document.body.classList.contains("modal-open")) {
     modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
     document.body.classList.add("modal-open");
@@ -179,7 +185,25 @@ const elements = {
   largestHolding: document.querySelector("#largestHolding"),
   resetButton: document.querySelector("#resetButton"),
   stockSearchInput: document.querySelector("#stockSearchInput"),
-  searchResults: document.querySelector("#searchResults")
+  searchResults: document.querySelector("#searchResults"),
+  authOpenButton: document.querySelector("#authOpenButton"),
+  authModal: document.querySelector("#authModal"),
+  emailLoginForm: document.querySelector("#emailLoginForm"),
+  emailLoginInput: document.querySelector("#emailLoginInput"),
+  emailDomainSelect: document.querySelector("#emailDomainSelect"),
+  passwordLoginInput: document.querySelector("#passwordLoginInput"),
+  kakaoLoginButton: document.querySelector("#kakaoLoginButton"),
+  authNotice: document.querySelector("#authNotice"),
+  signupForm: document.querySelector("#signupForm"),
+  signupNicknameInput: document.querySelector("#signupNicknameInput"),
+  signupEmailInput: document.querySelector("#signupEmailInput"),
+  signupDomainSelect: document.querySelector("#signupDomainSelect"),
+  signupPasswordInput: document.querySelector("#signupPasswordInput"),
+  signupPasswordConfirmInput: document.querySelector("#signupPasswordConfirmInput"),
+  verificationForm: document.querySelector("#verificationForm"),
+  verificationCodeInput: document.querySelector("#verificationCodeInput"),
+  signupSwitchButton: document.querySelector("#signupSwitchButton"),
+  loginSwitchButton: document.querySelector("#loginSwitchButton")
 };
 
 const marketElements = {
@@ -1060,6 +1084,164 @@ function closeHoldingModal() {
   syncModalScrollLock();
 }
 
+function loadAuthUser() {
+  try {
+    const saved = localStorage.getItem(authStorageKey);
+    authUser = saved ? JSON.parse(saved) : null;
+  } catch {
+    authUser = null;
+  }
+}
+
+function saveAuthUser(user) {
+  authUser = user;
+  localStorage.setItem(authStorageKey, JSON.stringify(user));
+  renderAuthState();
+}
+
+function loadAuthUsers() {
+  try {
+    return JSON.parse(localStorage.getItem(authUsersStorageKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveAuthUsers(users) {
+  localStorage.setItem(authUsersStorageKey, JSON.stringify(users));
+}
+
+function logoutAuthUser() {
+  authUser = null;
+  localStorage.removeItem(authStorageKey);
+  renderAuthState();
+}
+
+function renderAuthState() {
+  if (!elements.authOpenButton) return;
+  if (authUser) {
+    elements.authOpenButton.textContent = "프로필";
+    elements.authOpenButton.classList.add("signed-in");
+    elements.authOpenButton.setAttribute("aria-label", `${authUser.email || authUser.provider} 프로필`);
+    return;
+  }
+  elements.authOpenButton.textContent = "로그인";
+  elements.authOpenButton.classList.remove("signed-in");
+  elements.authOpenButton.setAttribute("aria-label", "로그인");
+}
+
+function openAuthModal() {
+  if (authUser) {
+    logoutAuthUser();
+    return;
+  }
+  elements.authModal.classList.add("open");
+  elements.authModal.setAttribute("aria-hidden", "false");
+  setAuthMode("login");
+  syncModalScrollLock();
+  setTimeout(() => elements.emailLoginInput?.focus(), 0);
+}
+
+function closeAuthModal() {
+  elements.authModal.classList.remove("open");
+  elements.authModal.setAttribute("aria-hidden", "true");
+  pendingSignup = null;
+  syncModalScrollLock();
+}
+
+function setAuthMode(mode) {
+  const isSignup = mode === "signup";
+  pendingSignup = null;
+  elements.emailLoginForm.classList.toggle("auth-form-hidden", isSignup);
+  elements.signupForm.classList.toggle("auth-form-hidden", !isSignup);
+  elements.verificationForm.classList.add("auth-form-hidden");
+  if (elements.authNotice) {
+    elements.authNotice.textContent = isSignup
+      ? "회원가입 후 이메일 인증번호 4자리를 확인합니다. 현재는 개발용으로 인증번호가 이 안내문에 표시됩니다."
+      : "현재 이메일 로그인은 이 브라우저에 저장된 계정으로 로그인합니다.";
+  }
+}
+
+function emailFromParts(id, domain) {
+  return `${id.trim().replace(/@.*/, "")}@${domain}`;
+}
+
+function loginWithEmail(email, password) {
+  const users = loadAuthUsers();
+  const user = users[email];
+  if (user && user.password !== password) {
+    if (elements.authNotice) elements.authNotice.textContent = "비밀번호가 일치하지 않습니다.";
+    return;
+  }
+  saveAuthUser({ provider: "email", email, name: user?.nickname || email.split("@")[0] || email });
+  closeAuthModal();
+}
+
+function requestSignupVerification() {
+  const nickname = elements.signupNicknameInput.value.trim();
+  const emailId = elements.signupEmailInput.value.trim().replace(/@.*/, "");
+  const email = emailFromParts(emailId, elements.signupDomainSelect.value);
+  const password = elements.signupPasswordInput.value;
+  const passwordConfirm = elements.signupPasswordConfirmInput.value;
+  if (!nickname || !emailId || !password || !passwordConfirm) return;
+  if (password !== passwordConfirm) {
+    if (elements.authNotice) elements.authNotice.textContent = "비밀번호와 비밀번호 확인이 일치하지 않습니다.";
+    return;
+  }
+  const users = loadAuthUsers();
+  if (users[email]) {
+    if (elements.authNotice) elements.authNotice.textContent = "이미 가입된 이메일입니다. 로그인 탭에서 로그인해주세요.";
+    return;
+  }
+
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  pendingSignup = { nickname, email, password, code };
+  elements.signupForm.classList.add("auth-form-hidden");
+  elements.verificationForm.classList.remove("auth-form-hidden");
+  elements.verificationCodeInput.value = "";
+  if (elements.authNotice) {
+    elements.authNotice.textContent = `${email}로 인증번호를 보냈습니다. 개발용 인증번호: ${code}`;
+  }
+  setTimeout(() => elements.verificationCodeInput?.focus(), 0);
+}
+
+function completeSignupVerification() {
+  if (!pendingSignup) return;
+  const code = elements.verificationCodeInput.value.trim();
+  if (code !== pendingSignup.code) {
+    if (elements.authNotice) elements.authNotice.textContent = "인증번호가 일치하지 않습니다.";
+    return;
+  }
+  const users = loadAuthUsers();
+  users[pendingSignup.email] = {
+    nickname: pendingSignup.nickname,
+    email: pendingSignup.email,
+    password: pendingSignup.password,
+    createdAt: new Date().toISOString()
+  };
+  saveAuthUsers(users);
+  saveAuthUser({ provider: "email", email: pendingSignup.email, name: pendingSignup.nickname });
+  pendingSignup = null;
+  closeAuthModal();
+}
+
+function loginWithKakao() {
+  if (!kakaoJavascriptKey) {
+    if (elements.authNotice) {
+      elements.authNotice.textContent = "카카오 Developers에서 JavaScript 키를 발급받아 app.js의 kakaoJavascriptKey에 넣으면 실제 카카오 로그인으로 연결됩니다.";
+    }
+    return;
+  }
+  if (!window.Kakao) {
+    if (elements.authNotice) elements.authNotice.textContent = "카카오 SDK를 불러오지 못했습니다. 네트워크 상태를 확인해주세요.";
+    return;
+  }
+  if (!window.Kakao.isInitialized()) {
+    window.Kakao.init(kakaoJavascriptKey);
+  }
+  window.Kakao.Auth.authorize({ redirectUri: kakaoRedirectUri });
+}
+
 function setActiveView(viewName) {
   document.querySelectorAll("[data-view]").forEach((view) => {
     view.classList.toggle("active", view.dataset.view === viewName);
@@ -1248,6 +1430,27 @@ elements.resetButton?.addEventListener("click", () => {
 });
 
 elements.stockSearchInput.addEventListener("input", renderSearchResults);
+elements.authOpenButton?.addEventListener("click", openAuthModal);
+elements.emailLoginForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const emailId = elements.emailLoginInput.value.trim();
+  const email = emailFromParts(emailId, elements.emailDomainSelect.value);
+  const password = elements.passwordLoginInput.value;
+  if (!emailId.trim().replace(/@.*/, "") || !password) return;
+  loginWithEmail(email, password);
+  elements.passwordLoginInput.value = "";
+});
+elements.signupForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  requestSignupVerification();
+});
+elements.verificationForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  completeSignupVerification();
+});
+elements.signupSwitchButton?.addEventListener("click", () => setAuthMode("signup"));
+elements.loginSwitchButton?.addEventListener("click", () => setAuthMode("login"));
+elements.kakaoLoginButton?.addEventListener("click", loginWithKakao);
 document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () => setActiveView(button.dataset.viewTarget));
 });
@@ -1304,6 +1507,11 @@ document.querySelectorAll("[data-close-index-modal]").forEach((button) => {
 document.querySelectorAll("[data-close-holding-modal]").forEach((button) => {
   button.addEventListener("click", closeHoldingModal);
 });
+document.querySelectorAll("[data-close-auth-modal]").forEach((button) => {
+  button.addEventListener("click", closeAuthModal);
+});
+loadAuthUser();
+renderAuthState();
 populateStocks();
 updateSelectedPrice();
 updateSortButtons();

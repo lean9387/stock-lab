@@ -100,6 +100,23 @@ button {
   color: var(--ink);
 }
 
+.auth-chip {
+  border: 1px solid rgba(79, 140, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(79, 140, 255, 0.1);
+  color: #d9e7ff;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.auth-chip.signed-in {
+  border-color: rgba(39, 213, 150, 0.26);
+  background: rgba(39, 213, 150, 0.1);
+  color: #baf7dd;
+}
+
 .pill {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -637,7 +654,8 @@ h2 {
 
 .stock-modal,
 .index-modal,
-.holding-modal {
+.holding-modal,
+.auth-modal {
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -650,7 +668,8 @@ h2 {
 
 .stock-modal.open,
 .index-modal.open,
-.holding-modal.open {
+.holding-modal.open,
+.auth-modal.open {
   display: grid;
 }
 
@@ -683,6 +702,18 @@ h2 {
 
 .holding-detail-panel {
   width: min(460px, 100%);
+}
+
+.auth-panel {
+  position: relative;
+  width: min(430px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(12, 19, 33, 0.98), rgba(4, 8, 15, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
 }
 
 .index-detail-panel {
@@ -893,6 +924,107 @@ h2 {
 
 .holding-modal-stock strong {
   font-size: 22px;
+}
+
+.kakao-login-button {
+  width: 100%;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 7px;
+  background: #fee500;
+  color: #191919;
+  padding: 12px 14px;
+  font-weight: 900;
+}
+
+.kakao-login-button span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(25, 25, 25, 0.12);
+  font-size: 11px;
+}
+
+.auth-divider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form-hidden {
+  display: none;
+}
+
+.auth-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.email-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(108px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.email-composer span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.email-composer select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 7px;
+  background: rgba(3, 7, 18, 0.48);
+  color: var(--ink);
+  padding: 11px 10px;
+}
+
+.auth-action-row button,
+.auth-form > button {
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--blue), #27d596);
+  color: white;
+  padding: 12px 14px;
+  font-weight: 900;
+}
+
+.auth-action-row button.secondary {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.045);
+  color: #d7deeb;
+}
+
+.auth-note {
+  margin: 14px 2px 0;
+  color: #7f8da3;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .investor-flow-table {
@@ -1720,19 +1852,19 @@ canvas {
   }
 
   .market-header {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
     grid-template-areas:
-      "clock brand"
-      "status fx";
-    justify-items: stretch;
+      "clock . brand . login"
+      ". overseas domestic fx .";
+    justify-items: center;
     align-items: center;
-    gap: 8px 10px;
+    gap: 7px 6px;
     padding: 10px;
   }
 
   .center-brand {
     grid-area: brand;
-    justify-self: start;
+    justify-self: center;
     gap: 8px;
   }
 
@@ -1753,9 +1885,15 @@ canvas {
   }
 
   .market-left {
-    grid-area: status;
-    justify-self: start;
-    gap: 6px;
+    display: contents;
+  }
+
+  .market-left .pill:first-child {
+    grid-area: overseas;
+  }
+
+  .market-left .pill:last-child {
+    grid-area: domestic;
   }
 
   .market-right {
@@ -1764,26 +1902,39 @@ canvas {
 
   .market-right span:first-child {
     grid-area: fx;
+    justify-self: center;
+    align-self: center;
+    font-size: 11px;
+    color: #d9e7ff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 5px 8px;
+  }
+
+  .auth-chip {
+    grid-area: login;
     justify-self: end;
-    font-size: 12px;
-    color: var(--muted);
+    align-self: center;
+    padding: 6px 10px;
+    font-size: 11px;
   }
 
   #marketTime {
     grid-area: clock;
-    justify-self: end;
-    padding: 5px 8px;
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.035);
-    color: #aeb8c7;
-    font-size: 12px;
+    justify-self: start;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #7f8da3;
+    font-size: 10px;
     line-height: 1;
   }
 
   .pill {
     padding: 5px 8px;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .section-tabs {
@@ -1872,6 +2023,18 @@ canvas {
     min-height: 46px;
   }
 
+  .email-composer {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .email-composer select {
+    grid-column: 1 / -1;
+  }
+
+  .auth-action-row {
+    grid-template-columns: 1fr;
+  }
+
   .heart-button {
     width: 32px;
     height: 32px;
@@ -1905,14 +2068,16 @@ canvas {
 
   .stock-modal,
   .index-modal,
-  .holding-modal {
+  .holding-modal,
+  .auth-modal {
     align-items: end;
     padding: 10px;
   }
 
   .stock-detail-panel,
   .index-detail-panel,
-  .holding-detail-panel {
+  .holding-detail-panel,
+  .auth-panel {
     width: 100%;
     max-width: 100%;
     max-height: calc(100vh - 20px);
@@ -1973,14 +2138,16 @@ canvas {
 @media (max-width: 900px) {
   .stock-modal,
   .index-modal,
-  .holding-modal {
+  .holding-modal,
+  .auth-modal {
     align-items: end;
     padding: 10px;
   }
 
   .stock-detail-panel,
   .index-detail-panel,
-  .holding-detail-panel {
+  .holding-detail-panel,
+  .auth-panel {
     width: 100%;
     max-width: 100%;
     max-height: calc(100vh - 20px);
@@ -2092,9 +2259,12 @@ canvas {
     font-size: 11px;
   }
 
-  .market-right span:first-child,
-  #marketTime {
+  .market-right span:first-child {
     font-size: 11px;
+  }
+
+  #marketTime {
+    font-size: 10px;
   }
 
   .index-modal {
