@@ -91,6 +91,10 @@ button {
   justify-content: flex-end;
 }
 
+.mobile-market-strip {
+  display: none;
+}
+
 .market-header span {
   white-space: nowrap;
   font-size: 13px;
@@ -1379,20 +1383,19 @@ select:focus {
   height: 32px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.025);
-  color: #9aa8bd;
-  font-size: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #b7c3d5;
+  font-size: 28px;
+  font-weight: 950;
   line-height: 1;
   transition: transform 180ms ease, border-color 180ms ease, color 180ms ease, background 180ms ease;
 }
 
 .holding-item.open .holding-chevron {
   transform: rotate(180deg);
-  border-color: rgba(79, 140, 255, 0.3);
-  background: rgba(79, 140, 255, 0.1);
-  color: #9fc0ff;
+  color: #dbeafe;
 }
 
 .inline-holding-form {
@@ -1855,7 +1858,7 @@ canvas {
     grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
     grid-template-areas:
       "clock . brand . login"
-      ". overseas domestic fx .";
+      ". strip strip strip .";
     justify-items: center;
     align-items: center;
     gap: 7px 6px;
@@ -1885,15 +1888,7 @@ canvas {
   }
 
   .market-left {
-    display: contents;
-  }
-
-  .market-left .pill:first-child {
-    grid-area: overseas;
-  }
-
-  .market-left .pill:last-child {
-    grid-area: domestic;
+    display: none;
   }
 
   .market-right {
@@ -1901,15 +1896,28 @@ canvas {
   }
 
   .market-right span:first-child {
-    grid-area: fx;
+    display: none;
+  }
+
+  .mobile-market-strip {
+    grid-area: strip;
     justify-self: center;
-    align-self: center;
-    font-size: 11px;
-    color: #d9e7ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .mobile-fx-pill {
     border: 1px solid var(--line);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.035);
+    color: #d9e7ff;
     padding: 5px 8px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .auth-chip {
@@ -2005,7 +2013,7 @@ canvas {
     width: 30px;
     height: 30px;
     margin-top: 7px;
-    font-size: 19px;
+    font-size: 27px;
   }
 
   .inline-holding-form {
