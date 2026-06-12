@@ -11,7 +11,10 @@ const stocks = [
   { code: "NVDA", name: "NVIDIA", koName: "엔비디아", market: "NASDAQ", currency: "USD", price: 141.72, change: 0.68, momentum: 0.3, volatility: 0.34, sector: "AI 반도체", annualDividend: 0.04, dividendYield: 0.03, dividendFrequency: "분기", marketCap: 3480000000000, tradedValue: 28000000000 },
   { code: "005930", name: "Samsung Electronics", koName: "삼성전자", market: "KRX", currency: "KRW", price: 74200, change: 1.4, momentum: 0.18, volatility: 0.22, sector: "반도체", annualDividend: 1444, dividendYield: 1.95, dividendFrequency: "분기", marketCap: 441000000000000, tradedValue: 920000000000 },
   { code: "000660", name: "SK hynix", koName: "SK하이닉스", market: "KRX", currency: "KRW", price: 224500, change: 2.1, momentum: 0.28, volatility: 0.31, sector: "반도체", annualDividend: 1200, dividendYield: 0.53, dividendFrequency: "분기", marketCap: 163000000000000, tradedValue: 1120000000000 },
-  { code: "005380", name: "Hyundai Motor", koName: "현대차", market: "KRX", currency: "KRW", price: 271000, change: 0.8, momentum: 0.12, volatility: 0.2, sector: "자동차", annualDividend: 12000, dividendYield: 4.43, dividendFrequency: "반기", marketCap: 56800000000000, tradedValue: 210000000000 }
+  { code: "005380", name: "Hyundai Motor", koName: "현대차", market: "KRX", currency: "KRW", price: 271000, change: 0.8, momentum: 0.12, volatility: 0.2, sector: "자동차", annualDividend: 12000, dividendYield: 4.43, dividendFrequency: "반기", marketCap: 56800000000000, tradedValue: 210000000000 },
+  { code: "CSWC", name: "Capital Southwest", koName: "캐피탈 사우스웨스트", market: "NASDAQ", currency: "USD", price: 23.55, change: -0.13, momentum: 0.05, volatility: 0.22, sector: "BDC", annualDividend: 2.32, dividendYield: 9.85, dividendFrequency: "분기", marketCap: 1574147846, tradedValue: 5900000 },
+  { code: "HPQ", name: "HP Inc.", koName: "HP", market: "NYSE", currency: "USD", price: 24.83, change: 0.57, momentum: 0.03, volatility: 0.2, sector: "PC·프린터", annualDividend: 1.10, dividendYield: 4.43, dividendFrequency: "분기", marketCap: 22981625000, tradedValue: 96000000 },
+  { code: "498400", name: "KODEX 200 Target Weekly Covered Call", koName: "KODEX 200타겟위클리커버드콜", market: "KRX", currency: "KRW", price: 24550, change: 0.84, momentum: 0.16, volatility: 0.2, sector: "월배당 ETF", annualDividend: 3600, dividendYield: 14.66, dividendFrequency: "월", marketCap: 6300000000000, tradedValue: 253790000000 }
 ];
 
 let holdings = [
@@ -26,19 +29,44 @@ let stockSort = "watch";
 let stockSortDirection = "asc";
 let detailPeriod = "1m";
 let detailChartHoverIndex = null;
+let allocationChartHoverIndex = null;
+let allocationChartState = { rows: [], segments: [], total: 0, layout: null };
+let activeHoldingEditorCode = null;
+let modalScrollY = 0;
 const marketQuotes = new Map();
+const investorFlowCache = new Map();
 const colors = ["#4f8cff", "#27d596", "#ff5d73", "#f2bf4b", "#8b5cf6", "#39d0ff", "#f472b6", "#94a3b8"];
 
 const krwFormatter = new Intl.NumberFormat("ko-KR");
 const usdFormatter = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const won = (value) => `${krwFormatter.format(Math.round(value))}원`;
 const money = (stock, value) => stock.currency === "USD" ? `$${usdFormatter.format(value)}` : won(value);
+const chartPriceLabel = (stock, value) => {
+  if (stock.currency === "USD") {
+    if (value >= 1000) return `$${Math.round(value).toLocaleString("en-US")}`;
+    if (value >= 100) return `$${value.toFixed(1)}`;
+    return `$${value.toFixed(2)}`;
+  }
+
+  const manwon = value / 10000;
+  return `${manwon >= 10 ? manwon.toFixed(1) : manwon.toFixed(2)}만원`;
+};
+const chartDateLabel = (date) => `${date.getMonth() + 1}.${date.getDate()}`;
 const priceInKrw = (stock) => stock.currency === "USD" ? stock.price * usdKrw : stock.price;
 const avgInKrw = (stock, avgPrice) => stock.currency === "USD" ? avgPrice * usdKrw : avgPrice;
 const annualDividendInKrw = (stock) => stock.currency === "USD" ? stock.annualDividend * usdKrw : stock.annualDividend;
 const percent = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 const stockByCode = (code) => stocks.find((stock) => stock.code === code);
 const isDomestic = (stock) => stock.market === "KRX";
+const ratioText = (value) => typeof value === "number" && Number.isFinite(value) ? value.toFixed(value >= 10 ? 1 : 2) : "-";
+const multipleText = (value) => typeof value === "number" && Number.isFinite(value) ? `${ratioText(value)}배` : "-";
+const metricPercentText = (value) => typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : "-";
+const marketCapKrw = (stock) => stock.currency === "USD" ? stock.marketCap * usdKrw : stock.marketCap;
+const compactKrw = (value) => {
+  if (value >= 1_0000_0000_0000) return `${(value / 1_0000_0000_0000).toFixed(1)}조원`;
+  if (value >= 1_0000_0000) return `${(value / 1_0000_0000).toFixed(1)}억원`;
+  return won(value);
+};
 const compactMoney = (stock, value) => {
   if (stock.currency === "USD") {
     if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
@@ -54,6 +82,7 @@ const yahooSymbolFor = (stock) => {
   if (stock.code === "005930") return "005930.KS";
   if (stock.code === "000660") return "000660.KS";
   if (stock.code === "005380") return "005380.KS";
+  if (stock.market === "KRX" && /^\d{6}$/.test(stock.code)) return `${stock.code}.KS`;
   return stock.code;
 };
 const signedPercentText = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
@@ -68,15 +97,53 @@ const stockLogos = {
   NVDA: { text: "NV", url: "https://logo.clearbit.com/nvidia.com" },
   "005930": { text: "삼", url: "https://logo.clearbit.com/samsung.com" },
   "000660": { text: "SK", url: "https://logo.clearbit.com/skhynix.com" },
-  "005380": { text: "H", url: "https://logo.clearbit.com/hyundai.com" }
+  "005380": { text: "H", url: "https://logo.clearbit.com/hyundai.com" },
+  CSWC: { text: "CS", url: "https://logo.clearbit.com/capitalsouthwest.com" },
+  HPQ: { text: "HP", url: "https://logo.clearbit.com/hp.com" },
+  "498400": { text: "KX", url: "https://logo.clearbit.com/samsungfund.com" }
 };
 const stockLogoFor = (stock) => stockLogos[stock.code] || { text: stock.code.slice(0, 2), url: "" };
+const valuationMetrics = {
+  JOBY: { pbr: 5.8, per: null, roe: -45.2, psr: 252.0 },
+  SLDP: { pbr: 1.2, per: null, roe: -33.4, psr: 148.0 },
+  SCHD: { pbr: null, per: null, roe: null, psr: null },
+  O: { pbr: 1.3, per: 43.8, roe: 3.1, psr: 9.2 },
+  VZ: { pbr: 1.7, per: 9.4, roe: 18.0, psr: 1.3 },
+  KO: { pbr: 10.5, per: 24.8, roe: 41.5, psr: 6.0 },
+  TSLA: { pbr: 13.2, per: 177.0, roe: 8.2, psr: 11.0 },
+  NVDA: { pbr: 51.0, per: 41.5, roe: 123.8, psr: 23.5 },
+  "005930": { pbr: 4.16, per: 24.17, roe: 17.2, psr: 2.8 },
+  "000660": { pbr: 2.1, per: 8.4, roe: 25.0, psr: 3.0 },
+  "005380": { pbr: 0.65, per: 5.5, roe: 12.2, psr: 0.36 },
+  CSWC: { pbr: 1.1, per: 11.3, roe: 10.2, psr: 9.5 },
+  HPQ: { pbr: null, per: 9.1, roe: null, psr: 0.36 },
+  "498400": { pbr: null, per: null, roe: null, psr: null }
+};
 const heartIcon = (active) => `
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M12 20.2c-.3 0-.6-.1-.8-.3C5.5 15.1 2 11.9 2 7.9 2 4.9 4.3 2.7 7.2 2.7c1.7 0 3.4.8 4.4 2.1 1-1.3 2.7-2.1 4.4-2.1 2.9 0 5.2 2.2 5.2 5.2 0 4-3.5 7.2-9.2 12-.2.2-.5.3-.8.3Z"/>
   </svg>
   <span>${active ? "관심중" : "관심"}</span>
 `;
+
+function syncModalScrollLock() {
+  const hasOpenModal = !!document.querySelector(".stock-modal.open, .index-modal.open, .holding-modal.open");
+  if (hasOpenModal && !document.body.classList.contains("modal-open")) {
+    modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.classList.add("modal-open");
+    document.body.style.top = `-${modalScrollY}px`;
+    document.body.style.position = "fixed";
+    document.body.style.width = "100%";
+    return;
+  }
+  if (!hasOpenModal && document.body.classList.contains("modal-open")) {
+    document.body.classList.remove("modal-open");
+    document.body.style.top = "";
+    document.body.style.position = "";
+    document.body.style.width = "";
+    window.scrollTo(0, modalScrollY);
+  }
+}
 
 function prepareCanvas(canvas) {
   const rect = canvas.getBoundingClientRect();
@@ -139,8 +206,7 @@ const detailElements = {
   sector: document.querySelector("#detailSector"),
   dividend: document.querySelector("#detailDividend"),
   yield: document.querySelector("#detailYield"),
-  watchButton: document.querySelector("#detailWatchButton"),
-  holdButton: document.querySelector("#detailHoldButton")
+  investorPanel: document.querySelector("#investorPanel")
 };
 const holdingModalElements = {
   modal: document.querySelector("#holdingModal"),
@@ -179,41 +245,43 @@ function generatePriceSeries(stock, period) {
   });
 }
 
-function investorFlow(stock) {
-  if (!isDomestic(stock)) {
-    return [
-      { date: "D-4", personal: "-", foreigner: "-", institution: "-" },
-      { date: "D-3", personal: "-", foreigner: "-", institution: "-" },
-      { date: "D-2", personal: "-", foreigner: "-", institution: "-" },
-      { date: "D-1", personal: "-", foreigner: "-", institution: "-" },
-      { date: "오늘", personal: "-", foreigner: "-", institution: "-" }
-    ];
+function recentBusinessDateLabels(count = 5) {
+  const dates = [];
+  const date = new Date();
+  while (dates.length < count) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) {
+      const year = String(date.getFullYear()).slice(2);
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const dayOfMonth = String(date.getDate()).padStart(2, "0");
+      dates.unshift(`${year}.${month}.${dayOfMonth}`);
+    }
+    date.setDate(date.getDate() - 1);
   }
+  return dates;
+}
 
-  const seed = Number(stock.code.slice(-3));
-  return Array.from({ length: 5 }, (_, index) => {
-    const personal = Math.round((Math.sin(seed + index) * 420 + 80) * 1000000);
-    const foreigner = Math.round((Math.cos(seed * 0.7 + index) * 360 - 40) * 1000000);
-    const institution = -(personal + foreigner);
-    return {
-      date: index === 4 ? "오늘" : `D-${4 - index}`,
-      personal,
-      foreigner,
-      institution
-    };
-  });
+function investorFlow(stock) {
+  return recentBusinessDateLabels().map((date) => ({
+    date,
+    personal: "-",
+    foreigner: "-",
+    institution: "-"
+  }));
 }
 
 function holdingRows() {
   return holdings.map((holding) => {
     const stock = stockByCode(holding.code);
+    if (!stock) return null;
     const value = priceInKrw(stock) * holding.quantity;
-    const cost = avgInKrw(stock, holding.avgPrice) * holding.quantity;
+    const avgPriceKrwValue = holding.avgPriceKrw || avgInKrw(stock, holding.avgPrice);
+    const cost = avgPriceKrwValue * holding.quantity;
     const profitRate = cost ? ((value - cost) / cost) * 100 : 0;
     const forecast = forecastFor(stock, forecastDays);
     const annualDividend = annualDividendInKrw(stock) * holding.quantity;
-    return { ...holding, stock, value, cost, profitRate, forecast, annualDividend };
-  });
+    return { ...holding, avgPriceKrwValue, stock, value, cost, profitRate, forecast, annualDividend };
+  }).filter(Boolean);
 }
 
 function forecastFor(stock, days) {
@@ -244,17 +312,24 @@ function drawAllocation(rows) {
   const canvas = elements.allocationChart;
   const { ctx, width, height } = prepareCanvas(canvas);
   const total = rows.reduce((sum, row) => sum + row.value, 0);
+  allocationChartState = { rows, segments: [], total, layout: null };
+  if (allocationChartHoverIndex !== null && allocationChartHoverIndex >= rows.length) {
+    allocationChartHoverIndex = null;
+  }
   ctx.clearRect(0, 0, width, height);
   fillChartBackground(ctx, width, height);
 
   if (!total) return;
 
-  const compact = width < 560;
-  const cx = compact ? width / 2 : Math.min(150, width * 0.24);
+  const compact = width < 620;
+  const legendWidth = compact ? Math.min(170, width * 0.42) : 286;
+  const chartWidth = Math.max(150, width - legendWidth - 24);
+  const cx = Math.max(84, Math.min(chartWidth / 2, chartWidth - 76));
   const cy = height / 2 + 2;
-  const radius = compact ? Math.min(width, height) * 0.28 : 72;
-  const lineWidth = compact ? 20 : 22;
+  const radius = Math.min(Math.max(Math.min(chartWidth, height) * 0.27, compact ? 50 : 64), compact ? 66 : 82);
+  const lineWidth = compact ? 18 : 22;
   const gap = 0.025;
+  allocationChartState.layout = { cx, cy, radius, lineWidth };
 
   const halo = ctx.createRadialGradient(cx, cy, 36, cx, cy, radius + 44);
   halo.addColorStop(0, "rgba(79, 140, 255, 0.12)");
@@ -277,16 +352,24 @@ function drawAllocation(rows) {
   rows.forEach((row, index) => {
     const angle = (row.value / total) * Math.PI * 2;
     const end = start + angle - gap;
+    const hovered = allocationChartHoverIndex === index;
     ctx.beginPath();
     ctx.strokeStyle = colors[index % colors.length];
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = hovered ? lineWidth + 6 : lineWidth;
     ctx.lineCap = "butt";
-    ctx.shadowColor = "rgba(0, 0, 0, 0)";
-    ctx.shadowBlur = 0;
+    ctx.shadowColor = hovered ? colors[index % colors.length] : "rgba(0, 0, 0, 0)";
+    ctx.shadowBlur = hovered ? 12 : 0;
     ctx.arc(cx, cy, radius, start + gap, Math.max(start + gap, end));
     ctx.stroke();
+    allocationChartState.segments.push({
+      index,
+      start: start + gap,
+      end: Math.max(start + gap, end),
+      row
+    });
     start += angle;
   });
+  ctx.shadowBlur = 0;
 
   ctx.beginPath();
   ctx.fillStyle = "rgba(5, 9, 17, 0.92)";
@@ -304,27 +387,14 @@ function drawAllocation(rows) {
   ctx.font = "12px Arial";
   ctx.fillText("보유종목", cx, cy + 18);
 
-  if (compact) {
-    ctx.textAlign = "center";
-    rows.slice(0, 3).forEach((row, index) => {
-      const percentValue = (row.value / total) * 100;
-      const x = width / 2 + (index - (Math.min(rows.length, 3) - 1) / 2) * 96;
-      const y = height - 24;
-      ctx.fillStyle = colors[index % colors.length];
-      ctx.font = "800 13px Arial";
-      ctx.fillText(row.stock.code, x, y - 14);
-      ctx.fillStyle = "#f4f7fb";
-      ctx.fillText(`${percentValue.toFixed(1)}%`, x, y + 2);
-    });
-    ctx.textAlign = "left";
-    return;
-  }
-
   ctx.textAlign = "left";
-  rows.forEach((row, index) => {
+  const legendCount = Math.min(rows.length, compact ? 3 : 5);
+  const legendX = compact ? Math.max(cx + radius + 30, width - legendWidth + 8) : Math.max(cx + radius + 68, width - 286);
+  const legendTop = compact ? Math.max(58, cy - (legendCount - 1) * 24) : Math.max(64, cy - (legendCount - 1) * 25);
+  const rowGap = compact ? 46 : 50;
+  rows.slice(0, legendCount).forEach((row, index) => {
     const percentValue = (row.value / total) * 100;
-    const legendX = Math.max(292, width - 286);
-    const y = 72 + index * 50;
+    const y = legendTop + index * rowGap;
     const color = colors[index % colors.length];
 
     ctx.fillStyle = color;
@@ -333,19 +403,89 @@ function drawAllocation(rows) {
     ctx.fill();
 
     ctx.fillStyle = "#f4f7fb";
-    ctx.font = "800 18px Arial";
+    ctx.font = compact ? "800 14px Arial" : "800 18px Arial";
     ctx.fillText(row.stock.code, legendX + 16, y - 4);
 
     ctx.fillStyle = "#8b98aa";
-    ctx.font = "12px Arial";
+    ctx.font = compact ? "11px Arial" : "12px Arial";
     ctx.fillText(won(row.value), legendX + 16, y + 15);
 
     ctx.textAlign = "right";
     ctx.fillStyle = color;
-    ctx.font = "800 20px Arial";
-    ctx.fillText(`${percentValue.toFixed(1)}%`, width - 30, y + 4);
+    ctx.font = compact ? "800 17px Arial" : "800 20px Arial";
+    ctx.fillText(`${percentValue.toFixed(1)}%`, width - (compact ? 18 : 30), y + 4);
     ctx.textAlign = "left";
   });
+  ctx.textAlign = "left";
+}
+
+function normalizeAngle(angle) {
+  const full = Math.PI * 2;
+  return ((angle % full) + full) % full;
+}
+
+function isAngleBetween(angle, start, end) {
+  const normalized = normalizeAngle(angle);
+  const normalizedStart = normalizeAngle(start);
+  const normalizedEnd = normalizeAngle(end);
+  if (normalizedStart <= normalizedEnd) {
+    return normalized >= normalizedStart && normalized <= normalizedEnd;
+  }
+  return normalized >= normalizedStart || normalized <= normalizedEnd;
+}
+
+function updateAllocationTooltip(event) {
+  const canvas = elements.allocationChart;
+  const tooltip = document.querySelector("#allocationTooltip");
+  const { rows, segments, total, layout } = allocationChartState;
+  if (!canvas || !tooltip || !layout || !total) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const dx = x - layout.cx;
+  const dy = y - layout.cy;
+  const distance = Math.hypot(dx, dy);
+  const inner = layout.radius - layout.lineWidth / 2 - 10;
+  const outer = layout.radius + layout.lineWidth / 2 + 10;
+
+  if (distance < inner || distance > outer) {
+    hideAllocationTooltip();
+    return;
+  }
+
+  const angle = Math.atan2(dy, dx);
+  const segment = segments.find((item) => isAngleBetween(angle, item.start, item.end));
+  if (!segment) {
+    hideAllocationTooltip();
+    return;
+  }
+
+  if (allocationChartHoverIndex !== segment.index) {
+    allocationChartHoverIndex = segment.index;
+    drawAllocation(rows);
+  }
+
+  const percentValue = (segment.row.value / total) * 100;
+  const tooltipX = Math.min(Math.max(x + 14, 8), rect.width - 178);
+  const tooltipY = Math.min(Math.max(y - 42, 8), rect.height - 92);
+  tooltip.style.left = `${tooltipX}px`;
+  tooltip.style.top = `${tooltipY}px`;
+  tooltip.hidden = false;
+  tooltip.innerHTML = `
+    <span>${segment.row.stock.koName} · ${segment.row.stock.code}</span>
+    <strong>${percentValue.toFixed(1)}%</strong>
+    <span>${won(segment.row.value)} · ${segment.row.quantity.toLocaleString("ko-KR")}주</span>
+  `;
+}
+
+function hideAllocationTooltip() {
+  const tooltip = document.querySelector("#allocationTooltip");
+  if (tooltip) tooltip.hidden = true;
+  if (allocationChartHoverIndex !== null) {
+    allocationChartHoverIndex = null;
+    drawAllocation(allocationChartState.rows);
+  }
 }
 
 function drawForecast(rows) {
@@ -432,20 +572,46 @@ function renderSummary(rows) {
 }
 
 function renderHoldings(rows) {
-  elements.holdingsList.innerHTML = rows.map((row) => `
-    <div class="holding-item">
-      <div class="holding-logo" aria-hidden="true">
-        ${stockLogoFor(row.stock).url ? `<img src="${stockLogoFor(row.stock).url}" alt="" loading="lazy" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()" />` : ""}
-        <span>${stockLogoFor(row.stock).text}</span>
+  const rowMap = new Map(rows.map((row) => [row.code, row]));
+  const watchRows = watchlistRows();
+  elements.holdingsList.innerHTML = watchRows.length ? watchRows.map((stock) => {
+    const row = rowMap.get(stock.code);
+    const isOpen = activeHoldingEditorCode === stock.code;
+    const defaultAvgPrice = Math.round(row?.avgPriceKrwValue || priceInKrw(stock));
+    const defaultQuantity = row?.quantity || "";
+    return `
+      <div class="holding-item watch-holding ${isOpen ? "open" : ""}">
+        <button class="holding-toggle" type="button" data-toggle-holding="${stock.code}" aria-expanded="${isOpen}">
+          <span class="holding-logo" aria-hidden="true">
+            ${stockLogoFor(stock).url ? `<img src="${stockLogoFor(stock).url}" alt="" loading="lazy" onload="this.parentElement.classList.add('has-logo')" onerror="this.remove()" />` : ""}
+            <span>${stockLogoFor(stock).text}</span>
+          </span>
+          <span class="holding-copy">
+            <strong>${stock.koName} <small>${stock.code}</small></strong>
+            <span>${stock.market} · ${money(stock, stock.price)} · 배당률 ${stock.dividendYield.toFixed(2)}%</span>
+            <small class="holding-sub">${row ? `${row.quantity.toLocaleString("ko-KR")}주 · 평가 ${won(row.value)} · 연 배당 ${won(row.annualDividend)}` : "보유수량과 평균 매입가를 입력해 내 주식에 반영"}</small>
+          </span>
+          <span class="holding-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <form class="inline-holding-form" data-holding-editor="${stock.code}">
+          <label>
+            보유수량
+            <input type="number" min="0" step="1" inputmode="numeric" name="quantity" value="${defaultQuantity}" placeholder="0" />
+          </label>
+          <label>
+            평균 매입가(원)
+            <input type="number" min="0" step="1" inputmode="numeric" name="avgPriceKrw" value="${defaultAvgPrice}" placeholder="${Math.round(priceInKrw(stock))}" />
+          </label>
+          <button type="submit">저장</button>
+        </form>
       </div>
-      <div class="holding-copy">
-        <strong>${row.stock.koName} <small>${row.stock.code}</small></strong>
-        <span>${row.quantity.toLocaleString("ko-KR")}주 · ${money(row.stock, row.stock.price)} · 배당률 ${row.stock.dividendYield.toFixed(2)}%</span>
-        <small class="holding-sub">${won(row.value)} · 연 배당 ${won(row.annualDividend)} · ${row.stock.dividendFrequency}</small>
-      </div>
-      <button class="holding-remove" type="button" aria-label="${row.stock.code} 삭제" data-remove="${row.code}">×</button>
+    `;
+  }).join("") : `
+    <div class="empty-search">
+      <strong>관심 종목이 없습니다</strong>
+      <span>주식 화면에서 하트를 눌러 관심 종목을 추가해보세요.</span>
     </div>
-  `).join("");
+  `;
 }
 
 function watchlistRows() {
@@ -572,22 +738,52 @@ function drawDetailChart(stock) {
   const closes = points.map((point) => point.close);
   const min = Math.min(...closes) * 0.98;
   const max = Math.max(...closes) * 1.02;
-  const left = 58;
+  const left = stock.currency === "USD" ? 60 : 74;
   const right = width - 26;
   const top = 24;
-  const bottom = height - 36;
+  const bottom = height - 48;
   const xForIndex = (index) => left + ((right - left) / Math.max(points.length - 1, 1)) * index;
   const yForClose = (close) => bottom - ((close - min) / (max - min)) * (bottom - top);
 
   ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
   ctx.lineWidth = 1;
-  for (let i = 0; i < 3; i += 1) {
-    const y = top + ((bottom - top) / 2) * i;
+  ctx.fillStyle = "#8b98aa";
+  ctx.font = "12px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const tickCount = 5;
+  for (let i = 0; i < tickCount; i += 1) {
+    const ratio = i / (tickCount - 1);
+    const y = top + (bottom - top) * ratio;
+    const value = max - (max - min) * ratio;
     ctx.beginPath();
     ctx.moveTo(left, y);
     ctx.lineTo(right, y);
     ctx.stroke();
+    ctx.fillText(chartPriceLabel(stock, value), 8, y);
   }
+  ctx.textBaseline = "alphabetic";
+
+  const xTickCount = detailPeriod === "1m" ? 5 : 6;
+  const xTickIndexes = Array.from({ length: xTickCount }, (_, index) => (
+    Math.round((index / Math.max(xTickCount - 1, 1)) * (points.length - 1))
+  ));
+  ctx.fillStyle = "#7f8da3";
+  ctx.font = "11px Arial";
+  ctx.textBaseline = "top";
+  xTickIndexes.forEach((pointIndex, index) => {
+    const x = xForIndex(pointIndex);
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.1)";
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+
+    ctx.textAlign = index === 0 ? "left" : index === xTickIndexes.length - 1 ? "right" : "center";
+    ctx.fillText(chartDateLabel(points[pointIndex].date), x, bottom + 14);
+  });
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 
   const gradient = ctx.createLinearGradient(left, 0, right, 0);
   gradient.addColorStop(0, "#39d0ff");
@@ -624,11 +820,6 @@ function drawDetailChart(stock) {
     ctx.stroke();
   }
 
-  ctx.fillStyle = "#8b98aa";
-  ctx.font = "12px Arial";
-  ctx.fillText(money(stock, max), 8, top + 4);
-  ctx.fillText(money(stock, min), 8, bottom);
-  ctx.fillText(detailPeriod === "1m" ? "1개월" : detailPeriod === "3m" ? "3개월" : "1년", left, height - 12);
 }
 
 function updateDetailChartTooltip(event) {
@@ -640,7 +831,7 @@ function updateDetailChartTooltip(event) {
 
   const points = generatePriceSeries(stock, detailPeriod);
   const rect = canvas.getBoundingClientRect();
-  const left = 58;
+  const left = stock.currency === "USD" ? 60 : 74;
   const right = rect.width - 26;
   const relativeX = Math.min(Math.max(event.clientX - rect.left, left), right);
   const index = Math.round(((relativeX - left) / Math.max(right - left, 1)) * (points.length - 1));
@@ -655,7 +846,7 @@ function updateDetailChartTooltip(event) {
   tooltip.hidden = false;
   tooltip.innerHTML = `
     <span>${new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(point.date)}</span>
-    <strong>${money(stock, point.close)}</strong>
+    <strong>${chartPriceLabel(stock, point.close)}</strong>
     <span>종가</span>
   `;
 }
@@ -667,7 +858,21 @@ function hideDetailChartTooltip() {
   if (activeDetailCode) drawDetailChart(stockByCode(activeDetailCode));
 }
 
-function renderInvestorFlow(stock) {
+function investorValueClass(value) {
+  if (typeof value !== "number") return "";
+  return value >= 0 ? "up" : "down";
+}
+
+function investorValueText(stock, value) {
+  if (typeof value !== "number") return value || "-";
+  const text = compactMoney(stock, value);
+  if (window.matchMedia("(max-width: 760px)").matches && isDomestic(stock)) {
+    return text.replace(/조원|억원|만원|원/g, "").trim();
+  }
+  return text;
+}
+
+function renderInvestorFlow(stock, rows = investorFlow(stock), note = "") {
   const table = document.querySelector("#investorFlowTable");
   if (!table) return;
   table.innerHTML = `
@@ -677,15 +882,55 @@ function renderInvestorFlow(stock) {
       <span>외국인</span>
       <span>기관</span>
     </div>
-    ${investorFlow(stock).map((row) => `
+    ${rows.map((row) => `
       <div class="investor-row">
         <span>${row.date}</span>
-        <span class="${typeof row.personal === "number" && row.personal >= 0 ? "up" : "down"}">${typeof row.personal === "number" ? compactMoney(stock, row.personal) : row.personal}</span>
-        <span class="${typeof row.foreigner === "number" && row.foreigner >= 0 ? "up" : "down"}">${typeof row.foreigner === "number" ? compactMoney(stock, row.foreigner) : row.foreigner}</span>
-        <span class="${typeof row.institution === "number" && row.institution >= 0 ? "up" : "down"}">${typeof row.institution === "number" ? compactMoney(stock, row.institution) : row.institution}</span>
+        <span class="${investorValueClass(row.personal)}">${investorValueText(stock, row.personal)}</span>
+        <span class="${investorValueClass(row.foreigner)}">${investorValueText(stock, row.foreigner)}</span>
+        <span class="${investorValueClass(row.institution)}">${investorValueText(stock, row.institution)}</span>
       </div>
     `).join("")}
+    ${note ? `<p class="investor-note">${note}</p>` : ""}
   `;
+}
+
+async function loadInvestorFlow(stock) {
+  if (!isDomestic(stock)) {
+    if (detailElements.investorPanel) detailElements.investorPanel.hidden = true;
+    return;
+  }
+
+  if (detailElements.investorPanel) detailElements.investorPanel.hidden = false;
+
+  if (investorFlowCache.has(stock.code)) {
+    const cached = investorFlowCache.get(stock.code);
+    renderInvestorFlow(stock, cached.rows, cached.error ? `KRX 연동 실패: ${cached.error}` : "출처: KRX 투자자별 거래실적");
+    return;
+  }
+
+  renderInvestorFlow(stock, investorFlow(stock).map((row) => ({
+    ...row,
+    personal: "연동 중",
+    foreigner: "연동 중",
+    institution: "연동 중"
+  })), "KRX 투자자별 거래실적을 불러오는 중입니다.");
+
+  try {
+    const response = await fetch(`/api/investor-flow?code=${encodeURIComponent(stock.code)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    const rows = Array.isArray(payload.rows) && payload.rows.length ? payload.rows : investorFlow(stock);
+    investorFlowCache.set(stock.code, { rows, error: payload.error || "" });
+    if (activeDetailCode === stock.code) {
+      renderInvestorFlow(stock, rows, payload.error ? `KRX 연동 실패: ${payload.error}` : "출처: KRX 투자자별 거래실적");
+    }
+  } catch (error) {
+    const rows = investorFlow(stock);
+    investorFlowCache.set(stock.code, { rows, error: error.message });
+    if (activeDetailCode === stock.code) {
+      renderInvestorFlow(stock, rows, `KRX 연동 실패: ${error.message}`);
+    }
+  }
 }
 
 function openStockDetail(code) {
@@ -699,25 +944,33 @@ function openStockDetail(code) {
   detailElements.price.textContent = money(stock, stock.price);
   detailElements.change.textContent = signedPercentText(stock.change || 0);
   detailElements.change.className = stock.change >= 0 ? "up" : "down";
-  detailElements.market.textContent = stock.market;
-  detailElements.sector.textContent = stock.sector;
-  detailElements.dividend.textContent = money(stock, stock.annualDividend);
-  detailElements.yield.textContent = `${stock.dividendYield.toFixed(2)}%`;
-  document.querySelector("#detailMarketCap").textContent = compactMoney(stock, stock.marketCap || 0);
-  document.querySelector("#detailTradedValue").textContent = compactMoney(stock, stock.tradedValue || 0);
-  detailElements.watchButton.textContent = watchlist.includes(code) ? "관심중" : "관심추가";
+  const metrics = valuationMetrics[stock.code] || {};
+  detailElements.market.textContent = compactKrw(marketCapKrw(stock) || 0);
+  detailElements.sector.textContent = `${stock.dividendYield.toFixed(2)}%`;
+  detailElements.dividend.textContent = multipleText(metrics.pbr);
+  detailElements.yield.textContent = multipleText(metrics.per);
+  document.querySelector("#detailMarketCap").textContent = metricPercentText(metrics.roe);
+  document.querySelector("#detailTradedValue").textContent = multipleText(metrics.psr);
   document.querySelectorAll("[data-detail-period]").forEach((button) => {
     button.classList.toggle("active", button.dataset.detailPeriod === detailPeriod);
   });
   drawDetailChart(stock);
-  renderInvestorFlow(stock);
+  if (isDomestic(stock)) {
+    if (detailElements.investorPanel) detailElements.investorPanel.hidden = false;
+    renderInvestorFlow(stock);
+    loadInvestorFlow(stock);
+  } else if (detailElements.investorPanel) {
+    detailElements.investorPanel.hidden = true;
+  }
   detailElements.modal.classList.add("open");
   detailElements.modal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
 }
 
 function closeStockDetail() {
   detailElements.modal.classList.remove("open");
   detailElements.modal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
 }
 
 function quoteFor(symbol, fallbackPrice, fallbackChange = 0) {
@@ -777,11 +1030,13 @@ function openIndexModal(group) {
   }).join("");
   indexModalElements.modal.classList.add("open");
   indexModalElements.modal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
 }
 
 function closeIndexModal() {
   indexModalElements.modal.classList.remove("open");
   indexModalElements.modal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
 }
 
 function openHoldingModal(code) {
@@ -795,12 +1050,14 @@ function openHoldingModal(code) {
   holdingModalElements.price.textContent = `현재가 ${money(stock, stock.price)}`;
   holdingModalElements.modal.classList.add("open");
   holdingModalElements.modal.setAttribute("aria-hidden", "false");
+  syncModalScrollLock();
   setTimeout(() => elements.quantityInput.focus(), 0);
 }
 
 function closeHoldingModal() {
   holdingModalElements.modal.classList.remove("open");
   holdingModalElements.modal.setAttribute("aria-hidden", "true");
+  syncModalScrollLock();
 }
 
 function setActiveView(viewName) {
@@ -924,9 +1181,29 @@ elements.holdingForm.addEventListener("submit", (event) => {
 });
 
 elements.holdingsList.addEventListener("click", (event) => {
-  const code = event.target.dataset.remove;
-  if (!code) return;
-  holdings = holdings.filter((holding) => holding.code !== code);
+  const toggle = event.target.closest("[data-toggle-holding]");
+  if (!toggle) return;
+  activeHoldingEditorCode = activeHoldingEditorCode === toggle.dataset.toggleHolding ? null : toggle.dataset.toggleHolding;
+  render();
+});
+
+elements.holdingsList.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-holding-editor]");
+  if (!form) return;
+  event.preventDefault();
+  const code = form.dataset.holdingEditor;
+  const quantity = Number(form.elements.quantity.value);
+  const avgPriceKrw = Number(form.elements.avgPriceKrw.value);
+  if (!code || !quantity || !avgPriceKrw) return;
+
+  const existing = holdings.find((holding) => holding.code === code);
+  if (existing) {
+    existing.quantity = quantity;
+    existing.avgPriceKrw = avgPriceKrw;
+  } else {
+    holdings.push({ code, quantity, avgPriceKrw });
+  }
+  activeHoldingEditorCode = code;
   render();
 });
 
@@ -943,6 +1220,8 @@ elements.searchResults.addEventListener("click", (event) => {
   if (watchCode) {
     if (watchlist.includes(watchCode)) {
       watchlist = watchlist.filter((code) => code !== watchCode);
+      holdings = holdings.filter((holding) => holding.code !== watchCode);
+      if (activeHoldingEditorCode === watchCode) activeHoldingEditorCode = null;
     } else {
       watchlist.unshift(watchCode);
     }
@@ -1009,6 +1288,13 @@ document.querySelectorAll("[data-detail-period]").forEach((button) => {
 });
 document.querySelector("#detailChart").addEventListener("mousemove", updateDetailChartTooltip);
 document.querySelector("#detailChart").addEventListener("mouseleave", hideDetailChartTooltip);
+elements.allocationChart.addEventListener("mousemove", updateAllocationTooltip);
+elements.allocationChart.addEventListener("mouseleave", hideAllocationTooltip);
+window.addEventListener("resize", () => {
+  allocationChartHoverIndex = null;
+  hideAllocationTooltip();
+  drawAllocation(holdingRows());
+});
 document.querySelectorAll("[data-close-stock-modal]").forEach((button) => {
   button.addEventListener("click", closeStockDetail);
 });
@@ -1017,18 +1303,6 @@ document.querySelectorAll("[data-close-index-modal]").forEach((button) => {
 });
 document.querySelectorAll("[data-close-holding-modal]").forEach((button) => {
   button.addEventListener("click", closeHoldingModal);
-});
-detailElements.watchButton.addEventListener("click", () => {
-  if (activeDetailCode && !watchlist.includes(activeDetailCode)) {
-    watchlist.unshift(activeDetailCode);
-  }
-  render();
-  openStockDetail(activeDetailCode);
-});
-detailElements.holdButton.addEventListener("click", () => {
-  if (!activeDetailCode) return;
-  closeStockDetail();
-  openHoldingModal(activeDetailCode);
 });
 populateStocks();
 updateSelectedPrice();

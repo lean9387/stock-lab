@@ -32,6 +32,10 @@ body {
   font-family: Arial, "Malgun Gothic", sans-serif;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select {
@@ -640,6 +644,8 @@ h2 {
   display: none;
   place-items: center;
   padding: 24px;
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .stock-modal.open,
@@ -661,6 +667,11 @@ h2 {
 .holding-detail-panel {
   position: relative;
   width: min(620px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 22px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -829,6 +840,14 @@ h2 {
   font-size: 24px;
 }
 
+.investor-note {
+  grid-column: 1 / -1;
+  margin: 8px 2px 0;
+  color: #7d899a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .index-modal-price em {
   font-style: normal;
   font-weight: 900;
@@ -848,6 +867,13 @@ h2 {
   color: #cfe0ff;
   padding: 11px 14px;
   font-weight: 900;
+}
+
+.modal-source-note {
+  margin: 14px 2px 0;
+  color: #738196;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .holding-modal-stock {
@@ -1052,6 +1078,12 @@ h2 {
   font-weight: 800;
 }
 
+.panel-head h2 small {
+  color: #7d899a;
+  font-size: 0.68em;
+  font-weight: 650;
+}
+
 .panel-head .modal-close {
   width: 32px;
   height: 32px;
@@ -1123,10 +1155,7 @@ select:focus {
 }
 
 .holding-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
+  display: block;
   min-height: 106px;
   padding: 16px;
   border: 1px solid var(--line);
@@ -1134,6 +1163,25 @@ select:focus {
   background:
     linear-gradient(135deg, rgba(79, 140, 255, 0.1), transparent 52%),
     rgba(3, 7, 18, 0.42);
+}
+
+.holding-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.holding-toggle:hover .holding-chevron {
+  border-color: rgba(79, 140, 255, 0.28);
+  color: #dce8ff;
 }
 
 .holding-logo {
@@ -1192,6 +1240,76 @@ select:focus {
   display: block;
   margin-top: 8px;
   color: var(--soft);
+}
+
+.holding-chevron {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.025);
+  color: #9aa8bd;
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 180ms ease, border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+
+.holding-item.open .holding-chevron {
+  transform: rotate(180deg);
+  border-color: rgba(79, 140, 255, 0.3);
+  background: rgba(79, 140, 255, 0.1);
+  color: #9fc0ff;
+}
+
+.inline-holding-form {
+  display: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.holding-item.open .inline-holding-form {
+  display: grid;
+}
+
+.inline-holding-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inline-holding-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 7px;
+  background: rgba(3, 7, 18, 0.48);
+  color: var(--ink);
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.inline-holding-form input:focus {
+  outline: none;
+  border-color: rgba(79, 140, 255, 0.58);
+  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.13);
+}
+
+.inline-holding-form button {
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--blue), #27d596);
+  color: white;
+  padding: 12px 16px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .holding-remove {
@@ -1431,7 +1549,7 @@ select:focus {
 }
 
 .dashboard .chart-panel {
-  max-width: 760px;
+  max-width: none;
   width: 100%;
 }
 
@@ -1441,6 +1559,16 @@ canvas {
   height: 260px;
   display: block;
   border-radius: 8px;
+}
+
+#allocationChart {
+  height: 280px;
+  cursor: pointer;
+}
+
+.allocation-tooltip {
+  pointer-events: none;
+  min-width: 170px;
 }
 
 .toggle {
@@ -1592,26 +1720,70 @@ canvas {
   }
 
   .market-header {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    gap: 12px;
-    padding: 14px;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "clock brand"
+      "status fx";
+    justify-items: stretch;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 10px;
   }
 
   .center-brand {
-    order: 1;
+    grid-area: brand;
+    justify-self: start;
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .center-brand strong {
+    font-size: 16px;
+  }
+
+  .center-brand small {
+    margin-top: 1px;
+    font-size: 10px;
   }
 
   .market-left {
-    order: 2;
-    flex-wrap: wrap;
-    justify-content: center;
+    grid-area: status;
+    justify-self: start;
+    gap: 6px;
   }
 
   .market-right {
-    order: 3;
-    justify-content: center;
-    flex-wrap: wrap;
+    display: contents;
+  }
+
+  .market-right span:first-child {
+    grid-area: fx;
+    justify-self: end;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  #marketTime {
+    grid-area: clock;
+    justify-self: end;
+    padding: 5px 8px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+    color: #aeb8c7;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .pill {
+    padding: 5px 8px;
+    font-size: 12px;
   }
 
   .section-tabs {
@@ -1648,6 +1820,56 @@ canvas {
 
   .search-actions button {
     width: 100%;
+  }
+
+  .holding-item {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .holding-toggle {
+    grid-template-columns: 44px minmax(0, 1fr) 30px;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .holding-logo {
+    width: 44px;
+    height: 44px;
+    font-size: 13px;
+  }
+
+  .holding-copy strong {
+    margin-bottom: 4px;
+    font-size: 16px;
+    line-height: 1.25;
+  }
+
+  .holding-copy span,
+  .holding-sub {
+    line-height: 1.45;
+  }
+
+  .holding-chevron {
+    width: 30px;
+    height: 30px;
+    margin-top: 7px;
+    font-size: 19px;
+  }
+
+  .inline-holding-form {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .inline-holding-form input {
+    font-size: 16px;
+  }
+
+  .inline-holding-form button {
+    width: 100%;
+    min-height: 46px;
   }
 
   .heart-button {
@@ -1711,6 +1933,14 @@ canvas {
     background: rgba(9, 13, 20, 0.96);
   }
 
+  .stock-detail-panel .panel-head {
+    position: static;
+    margin: 0 0 14px;
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+  }
+
   .detail-main strong {
     font-size: 34px;
   }
@@ -1771,6 +2001,14 @@ canvas {
     background: rgba(9, 13, 20, 0.96);
   }
 
+  .stock-detail-panel .panel-head {
+    position: static;
+    margin: 0 0 14px;
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+  }
+
   .detail-main strong {
     font-size: 34px;
   }
@@ -1826,6 +2064,39 @@ canvas {
 }
 
 @media (max-width: 480px) {
+  .market-header {
+    gap: 7px 8px;
+    padding: 9px;
+  }
+
+  .center-brand {
+    gap: 7px;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .center-brand strong {
+    font-size: 15px;
+  }
+
+  .center-brand small {
+    font-size: 9px;
+  }
+
+  .pill {
+    padding: 5px 7px;
+    font-size: 11px;
+  }
+
+  .market-right span:first-child,
+  #marketTime {
+    font-size: 11px;
+  }
+
   .index-modal {
     align-items: center;
     justify-items: center;
